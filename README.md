@@ -40,11 +40,14 @@ trader/
    cp .env.example .env
    ```
    
-   Edit `.env` and add your Alpaca credentials:
+   Edit `.env` and add your credentials:
    ```
    ALPACA_API_KEY=your_key_here
    ALPACA_SECRET_KEY=your_secret_here
    ALPACA_BASE_URL=https://paper-api.alpaca.markets  # Use this for paper trading
+   
+   # For Claude integration (get from https://console.anthropic.com/)
+   ANTHROPIC_API_KEY=your_anthropic_key_here
    ```
 
 ## Quick Start
