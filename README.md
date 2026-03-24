@@ -231,42 +231,115 @@ Account(
 )
 ```
 
-## Using with Claude Agents
+## Using with Claude for Work (MCP Server)
 
-The `claude_tools.py` script provides a complete integration with Claude's tool-calling capabilities:
+The `mcp_server.py` provides a **Model Context Protocol (MCP) server** that integrates seamlessly with Claude for Work, offering cost-effective trading without API call charges.
+
+### Why MCP over Direct API Calls?
+
+- **💰 Cost**: No API call charges - included in Claude for Work pricing
+- **🔗 Native Integration**: Claude for Work discovers and uses tools automatically
+- **⚡ Performance**: Direct connection without HTTP overhead
+- **🛡️ Security**: Server runs on your infrastructure
+
+### Setup Instructions
+
+1. **Deploy to your droplet:**
+   ```bash
+   # On your DigitalOcean droplet
+   git clone https://github.com/ajberenstein/trader.git
+   cd trader
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   cp .env.example .env
+   # Edit .env with your Alpaca credentials
+   ```
+
+2. **Configure Claude for Work:**
+   - In Claude for Work settings, add your MCP server endpoint
+   - Point to: `http://your-droplet-ip:port` (default port 8000)
+   - The server will auto-discover available trading tools
+
+3. **Start the server:**
+   ```bash
+   python mcp_server.py
+   ```
+
+### Available MCP Tools
+
+Once connected, Claude for Work will have access to:
+
+- ✅ `check_account()` - Account status and balances
+- 📊 `get_price_history(symbol, days)` - Historical price analysis
+- 💼 `place_order(symbol, quantity, side)` - Execute trades
+- 📈 `backtest_strategy(symbol, strategy, period)` - Strategy testing
+- 🔄 `get_market_comparison(symbols)` - Multi-symbol analysis
+
+### Example Usage in Claude for Work
+
+```
+You: Analyze AAPL and GOOGL, then buy 5 shares of the better performer
+
+Claude: Let me check both stocks' recent performance...
+[Calls get_price_history for AAPL and GOOGL]
+[Analyzes trends and compares performance]
+[Calls place_order for the better stock]
+✅ Order placed successfully!
+```
+
+### Security & Paper Trading
+
+- **Always use paper trading first**: Set `ALPACA_BASE_URL=https://paper-api.alpaca.markets`
+- **Server security**: Run behind firewall/reverse proxy on your droplet
+- **API keys**: Never expose Alpaca credentials in logs
+
+### Troubleshooting
+
+- **Connection issues**: Check firewall allows port 8000
+- **Tool not appearing**: Restart Claude for Work after server connection
+- **Trading errors**: Verify .env configuration on droplet
+
+## Deployment to DigitalOcean Droplet
+
+Use the automated deployment script for easy setup:
 
 ```bash
-# Install additional dependency
-pip install anthropic
-
-# Set up Anthropic API key in .env
-ANTHROPIC_API_KEY=your_key_here
-
-# Run the interactive Claude trading assistant
-python claude_tools.py
+# On your fresh DigitalOcean droplet (Ubuntu 22.04+)
+wget https://raw.githubusercontent.com/ajberenstein/trader/main/deploy_droplet.sh
+chmod +x deploy_droplet.sh
+sudo ./deploy_droplet.sh
 ```
 
-This starts an interactive session where Claude can:
-- ✅ Check account status
-- 📊 Analyze price history  
-- 💼 Place orders autonomously
-- 📈 Run backtests on strategies
+The script will:
+- ✅ Install all dependencies
+- ✅ Set up systemd service for auto-start
+- ✅ Configure firewall (port 8000)
+- ✅ Create proper user permissions
 
-**Example conversation:**
-```
-You: Analyze AAPL and buy 10 shares if the price is below $180
+After deployment:
+1. Edit `/opt/trader/.env` with your Alpaca credentials
+2. Restart service: `sudo systemctl restart trader-mcp`
+3. Configure Claude for Work to connect to your droplet's IP on port 8000
 
-Claude: First, let me check the account status...
-[Calls check_account tool]
-Account has $95,000 cash available.
+### Manual Deployment
 
-Now let me get the current price data for AAPL...
-[Calls get_price_history tool]  
-AAPL is currently $175 (-2.3% from 20-day high).
+If you prefer manual setup:
 
-This looks like a good buying opportunity. Placing order...
-[Calls place_order tool]
-✅ Order placed: AAPL buy 10 shares at market price
+```bash
+# Clone and setup
+git clone https://github.com/ajberenstein/trader.git
+cd trader
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Configure
+cp .env.example .env
+# Edit .env with credentials
+
+# Run server
+python mcp_server.py
 ```
 
 ### Manual Claude Tools Setup
@@ -317,11 +390,11 @@ ALPACA_BASE_URL=https://api.alpaca.markets
 ## Roadmap
 
 - [x] Strategy backtesting
+- [x] MCP Server wrapper for direct Claude integration
 - [ ] Support for crypto trading (currently stocks only)
 - [ ] Advanced order types (trailing stops, brackets)
 - [ ] Streaming real-time quotes
 - [ ] Performance analytics
-- [ ] MCP Server wrapper for direct Claude integration
 
 ## Requirements
 
@@ -331,7 +404,7 @@ ALPACA_BASE_URL=https://api.alpaca.markets
 - pandas >= 1.5.0
 - python-dotenv >= 0.19.0
 - yfinance >= 0.2.0
-- anthropic >= 0.7.0
+- mcp >= 1.26.0
 
 ## License
 
