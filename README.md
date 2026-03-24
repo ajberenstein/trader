@@ -230,6 +230,44 @@ Account(
 
 ## Using with Claude Agents
 
+The `claude_tools.py` script provides a complete integration with Claude's tool-calling capabilities:
+
+```bash
+# Install additional dependency
+pip install anthropic
+
+# Set up Anthropic API key in .env
+ANTHROPIC_API_KEY=your_key_here
+
+# Run the interactive Claude trading assistant
+python claude_tools.py
+```
+
+This starts an interactive session where Claude can:
+- ✅ Check account status
+- 📊 Analyze price history  
+- 💼 Place orders autonomously
+- 📈 Run backtests on strategies
+
+**Example conversation:**
+```
+You: Analyze AAPL and buy 10 shares if the price is below $180
+
+Claude: First, let me check the account status...
+[Calls check_account tool]
+Account has $95,000 cash available.
+
+Now let me get the current price data for AAPL...
+[Calls get_price_history tool]  
+AAPL is currently $175 (-2.3% from 20-day high).
+
+This looks like a good buying opportunity. Placing order...
+[Calls place_order tool]
+✅ Order placed: AAPL buy 10 shares at market price
+```
+
+### Manual Claude Tools Setup
+
 Define these functions in your Claude tool definitions:
 
 ```json
@@ -290,6 +328,7 @@ ALPACA_BASE_URL=https://api.alpaca.markets
 - pandas >= 1.5.0
 - python-dotenv >= 0.19.0
 - yfinance >= 0.2.0
+- anthropic >= 0.7.0
 
 ## License
 
