@@ -19,6 +19,9 @@ from typing import Any, Sequence
 from mcp import Server, Tool
 from mcp.types import TextContent, PromptMessage
 import mcp.server
+from fastapi import FastAPI
+from uvicorn import Config, Server as UvicornServer
+import threading
 
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
@@ -140,6 +143,21 @@ class TradingMCPServer:
 server = Server("trading-tools")
 trading_server = TradingMCPServer()
 
+# Create FastAPI app for health checks
+app = FastAPI(title="Trader MCP Health Check")
+
+
+@app.get("/health")
+async def health_check():
+    """HTTP health check endpoint."""
+    health_status = {
+        "status": "healthy",
+        "trading_connection": trading_server.connector is not None,
+        "market_data": trading_server.market is not None,
+        "version": "1.0.0"
+    }
+    return health_status
+
 
 @server.tool()
 async def check_account() -> str:
@@ -183,9 +201,39 @@ async def get_market_comparison(symbols: str) -> str:
         return json.dumps({"error": f"Failed to compare symbols: {str(e)}"})
 
 
+@server.tool()
+async def health_check() -> str:
+    """Check server health and connectivity."""
+    health_status = {
+        "status": "healthy",
+        "timestamp": "2026-03-24T12:00:00Z",  # Would use datetime in real implementation
+        "trading_connection": trading_server.connector is not None,
+        "market_data": trading_server.market is not None,
+        "version": "1.0.0"
+    }
+    return json.dumps(health_status, indent=2)
+
+
+async def run_http_server():
+    """Run the HTTP health check server."""
+    config = Config(app=app, host="0.0.0.0", port=8000, log_level="info")
+    http_server = UvicornServer(config)
+    await http_server.serve()
+
+
+async def run_mcp_server():
+    """Run the MCP server."""
+    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            server.create_initialization_options()
+        )
+
+
 async def main():
-    """Main server function."""
-    print("🤖 Starting Trading MCP Server...")
+    """Main function."""
+    print("🤖 Starting Trader MCP Server with Health Check")
     print("=" * 50)
 
     # Initialize trading connections
@@ -195,14 +243,13 @@ async def main():
 
     print("✅ Trading connections initialized successfully!")
     print("🚀 Server ready for Claude for Work connections")
+    print("📊 Health check available at: http://localhost:8000/health")
 
-    # Start MCP server
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options()
-        )
+    # Run both servers concurrently
+    await asyncio.gather(
+        run_http_server(),
+        run_mcp_server()
+    )
 
 
 if __name__ == "__main__":

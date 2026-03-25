@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  trader-mcp:
+    build: .
+    container_name: trader-mcp-server
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost',8000))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - trader-network
+
+networks:
+  trader-network:
+    driver: bridge
+
+volumes:
+  trader-logs:
+    driver: local

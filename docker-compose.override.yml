@@ -1,0 +1,16 @@
+# Docker Compose override for development
+version: '3.8'
+
+services:
+  trader-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+    command: ["python", "mcp_server.py"]
+    ports:
+      - "8000:8000"

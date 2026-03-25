@@ -302,7 +302,32 @@ Claude: Let me check both stocks' recent performance...
 
 ## Deployment to DigitalOcean Droplet
 
-Use the automated deployment script for easy setup:
+### Option 1: Docker Deployment (Recommended)
+
+The easiest way to deploy is using Docker:
+
+```bash
+# On your DigitalOcean droplet
+git clone https://github.com/ajberenstein/trader.git
+cd trader
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your Alpaca credentials
+
+# Build and run with Docker Compose
+docker-compose up -d --build
+
+# Check logs
+docker-compose logs -f trader-mcp
+
+# Check health
+curl http://localhost:8000/health
+```
+
+### Option 2: Automated Script
+
+Use the automated deployment script:
 
 ```bash
 # On your fresh DigitalOcean droplet (Ubuntu 22.04+)
@@ -311,18 +336,7 @@ chmod +x deploy_droplet.sh
 sudo ./deploy_droplet.sh
 ```
 
-The script will:
-- ✅ Install all dependencies
-- ✅ Set up systemd service for auto-start
-- ✅ Configure firewall (port 8000)
-- ✅ Create proper user permissions
-
-After deployment:
-1. Edit `/opt/trader/.env` with your Alpaca credentials
-2. Restart service: `sudo systemctl restart trader-mcp`
-3. Configure Claude for Work to connect to your droplet's IP on port 8000
-
-### Manual Deployment
+### Option 3: Manual Deployment
 
 If you prefer manual setup:
 
@@ -387,14 +401,66 @@ ALPACA_BASE_URL=https://api.alpaca.markets
 
 ⚠️ **Always test thoroughly with paper trading first!**
 
-## Roadmap
+## Docker Containerization 🐳
 
-- [x] Strategy backtesting
-- [x] MCP Server wrapper for direct Claude integration
-- [ ] Support for crypto trading (currently stocks only)
-- [ ] Advanced order types (trailing stops, brackets)
-- [ ] Streaming real-time quotes
-- [ ] Performance analytics
+The project is fully containerized for easy deployment and scaling:
+
+### Quick Start with Docker
+
+```bash
+# Clone repository
+git clone https://github.com/ajberenstein/trader.git
+cd trader
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your Alpaca API credentials
+
+# Build and run
+docker-compose up -d --build
+
+# Check logs
+docker-compose logs -f
+
+# Health check
+curl http://localhost:8000/health
+```
+
+### Docker Architecture
+
+- **Multi-stage build** for optimized image size
+- **Health checks** for container monitoring
+- **Non-root user** for security
+- **Volume mounts** for logs and configuration
+- **Development override** for local development
+
+### Docker Commands
+
+```bash
+# Build image
+docker build -t trader-mcp .
+
+# Run container
+docker run -d --name trader-mcp -p 8000:8000 --env-file .env trader-mcp
+
+# View logs
+docker logs -f trader-mcp
+
+# Stop container
+docker-compose down
+```
+
+### Production Deployment
+
+For production on your droplet:
+
+```bash
+# Use docker-compose for production
+docker-compose -f docker-compose.yml up -d
+
+# Or use swarm mode for scaling
+docker stack deploy -c docker-compose.yml trader
+```
 
 ## Requirements
 
@@ -405,6 +471,19 @@ ALPACA_BASE_URL=https://api.alpaca.markets
 - python-dotenv >= 0.19.0
 - yfinance >= 0.2.0
 - mcp >= 1.26.0
+- fastapi >= 0.104.0
+- uvicorn >= 0.24.0
+- Docker (for containerized deployment)
+
+## Roadmap
+
+- [x] Strategy backtesting
+- [x] MCP Server wrapper for direct Claude integration
+- [x] Docker containerization
+- [ ] Support for crypto trading (currently stocks only)
+- [ ] Advanced order types (trailing stops, brackets)
+- [ ] Streaming real-time quotes
+- [ ] Performance analytics
 
 ## License
 
