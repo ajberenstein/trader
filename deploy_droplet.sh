@@ -72,7 +72,7 @@ sudo systemctl start trader-mcp
 
 # Configure firewall
 echo "🔥 Configuring firewall..."
-sudo ufw allow 8000/tcp
+sudo ufw allow 8080/tcp
 sudo ufw --force enable
 
 # Check service status

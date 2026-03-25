@@ -13,4 +13,4 @@ services:
       - PYTHONPATH=/app
     command: ["python", "mcp_server.py"]
     ports:
-      - "8000:8000"
+      - "8080:8080"

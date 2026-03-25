@@ -216,7 +216,7 @@ async def health_check() -> str:
 
 async def run_http_server():
     """Run the HTTP health check server."""
-    config = Config(app=app, host="0.0.0.0", port=8000, log_level="info")
+    config = Config(app=app, host="0.0.0.0", port=8080, log_level="info")
     http_server = UvicornServer(config)
     await http_server.serve()
 

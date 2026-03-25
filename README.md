@@ -258,7 +258,7 @@ The `mcp_server.py` provides a **Model Context Protocol (MCP) server** that inte
 
 2. **Configure Claude for Work:**
    - In Claude for Work settings, add your MCP server endpoint
-   - Point to: `http://your-droplet-ip:port` (default port 8000)
+   - Point to: `http://your-droplet-ip:port` (default port 8080)
    - The server will auto-discover available trading tools
 
 3. **Start the server:**
@@ -296,7 +296,7 @@ Claude: Let me check both stocks' recent performance...
 
 ### Troubleshooting
 
-- **Connection issues**: Check firewall allows port 8000
+- **Connection issues**: Check firewall allows port 8080
 - **Tool not appearing**: Restart Claude for Work after server connection
 - **Trading errors**: Verify .env configuration on droplet
 
@@ -322,7 +322,7 @@ docker-compose up -d --build
 docker-compose logs -f trader-mcp
 
 # Check health
-curl http://localhost:8000/health
+curl http://localhost:8080/health
 ```
 
 ### Option 2: Automated Script
@@ -441,7 +441,7 @@ curl http://localhost:8000/health
 docker build -t trader-mcp .
 
 # Run container
-docker run -d --name trader-mcp -p 8000:8000 --env-file .env trader-mcp
+docker run -d --name trader-mcp -p 8080:8080 --env-file .env trader-mcp
 
 # View logs
 docker logs -f trader-mcp
