@@ -110,8 +110,10 @@ class TradingMCPServer:
     async def backtest_strategy(self, symbol: str, strategy: str, period: str = "1y") -> dict[str, Any]:
         """Run a backtest on a trading strategy."""
         try:
-            # Get historical data
-            data = fetch_yahoo_data(symbol, period=period)
+            # Convert period string to days
+            period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+            days = period_days.get(period, 365)
+            data = fetch_yahoo_data(symbol, days=days)
 
             # Select strategy
             if strategy == "simple_dip":
@@ -122,16 +124,16 @@ class TradingMCPServer:
                 return {"error": f"Unknown strategy: {strategy}"}
 
             # Run backtest
-            results = self.backtester.run(strat, data)
+            results = self.backtester.run(symbol, data, strat)
 
             return {
                 "symbol": symbol,
                 "strategy": strategy,
                 "period": period,
-                "total_return": float(results.total_return),
-                "total_trades": results.total_trades,
+                "total_return_pct": float(results.total_profit_pct),
+                "total_trades": results.num_trades,
                 "winning_trades": results.winning_trades,
-                "win_rate": float(results.win_rate),
+                "win_rate_pct": float(results.win_rate_pct),
                 "data_points": len(data)
             }
         except Exception as e:

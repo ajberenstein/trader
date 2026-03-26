@@ -91,7 +91,7 @@ class ClaudeTradingTools:
         self.connector = None
         self.market = None
         self.trading = None
-        self.backtester = Backtester(initial_cash=10000)
+        self.backtester = Backtester(initial_capital=10000)
 
     def initialize(self) -> bool:
         """Initialize the trading connection."""
@@ -157,9 +157,9 @@ class ClaudeTradingTools:
                 "order_id": order.id,
                 "status": order.status,
                 "symbol": order.symbol,
-                "quantity": float(order.qty),
+                "quantity": float(order.quantity),
                 "side": order.side,
-                "type": order.type
+                "type": order.order_type
             }
         except Exception as e:
             return {"error": f"Failed to place order: {str(e)}"}
@@ -167,8 +167,10 @@ class ClaudeTradingTools:
     def backtest_strategy(self, symbol: str, strategy: str, period: str = "1y") -> Dict[str, Any]:
         """Handle backtest_strategy tool call."""
         try:
-            # Get historical data
-            data = fetch_yahoo_data(symbol, period=period)
+            # Convert period string to days
+            period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+            days = period_days.get(period, 365)
+            data = fetch_yahoo_data(symbol, days=days)
 
             # Select strategy
             if strategy == "simple_dip":
@@ -179,16 +181,16 @@ class ClaudeTradingTools:
                 return {"error": f"Unknown strategy: {strategy}"}
 
             # Run backtest
-            results = self.backtester.run(strat, data)
+            results = self.backtester.run(symbol, data, strat)
 
             return {
                 "symbol": symbol,
                 "strategy": strategy,
                 "period": period,
-                "total_return": float(results.total_return),
-                "total_trades": results.total_trades,
+                "total_return_pct": float(results.total_profit_pct),
+                "total_trades": results.num_trades,
                 "winning_trades": results.winning_trades,
-                "win_rate": float(results.win_rate),
+                "win_rate_pct": float(results.win_rate_pct),
                 "data_points": len(data)
             }
         except Exception as e:
