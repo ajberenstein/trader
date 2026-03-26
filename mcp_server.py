@@ -17,9 +17,10 @@ import json
 import os
 from typing import Any, Sequence
 from mcp.server.fastmcp import FastMCP
-from fastapi import FastAPI
+from mcp.server.transport_security import TransportSecuritySettings
+from starlette.routing import Route
+from starlette.responses import JSONResponse
 from uvicorn import Config, Server as UvicornServer
-import threading
 
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
@@ -137,25 +138,27 @@ class TradingMCPServer:
             return {"error": f"Failed to run backtest: {str(e)}"}
 
 
-# Create MCP server instance
-server = FastMCP("trading-tools")
+# Create MCP server instance — allow external host (behind Caddy reverse proxy)
+server = FastMCP("trading-tools", transport_security=TransportSecuritySettings(
+    allowed_hosts=["trader.137-184-12-167.sslip.io", "127.0.0.1:*", "localhost:*", "[::1]:*"]
+))
 trading_server = TradingMCPServer()
 
-# Create FastAPI app for health checks and MCP endpoint
-app = FastAPI(title="Trader MCP Health Check")
-app.mount("/mcp", server.streamable_http_app())
 
-
-@app.get("/health")
-async def health_check():
+async def health_endpoint(request):
     """HTTP health check endpoint."""
-    health_status = {
+    return JSONResponse({
         "status": "healthy",
         "trading_connection": trading_server.connector is not None,
         "market_data": trading_server.market is not None,
         "version": "1.0.0"
-    }
-    return health_status
+    })
+
+
+# Use FastMCP's own Starlette app directly (preserves lifespan/task group init).
+# Add /health as a route on the same app.
+app = server.streamable_http_app()
+app.routes.insert(0, Route("/health", health_endpoint))
 
 
 @server.tool()
@@ -215,7 +218,7 @@ async def health_check() -> str:
 
 async def run_http_server():
     """Run the HTTP health check server."""
-    config = Config(app=app, host="0.0.0.0", port=8080, log_level="info")
+    config = Config(app=app, host="0.0.0.0", port=8080, log_level="info", proxy_headers=True, forwarded_allow_ips="*")
     http_server = UvicornServer(config)
     await http_server.serve()
 
