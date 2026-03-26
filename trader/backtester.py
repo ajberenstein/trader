@@ -131,8 +131,7 @@ class Backtester:
             # Check if we should sell
             if position:
                 if strategy.should_sell(history, current_price, position["entry_price"]):
-                    profit = (current_price - position["entry_price"]) * position["shares"]
-                    capital += profit
+                    capital += current_price * position["shares"]  # return full proceeds
                     trades.append(
                         Trade(
                             entry_date=position["entry_date"],
@@ -165,8 +164,7 @@ class Backtester:
         # Close any open position at end
         if position:
             final_price = price_data[-1].close
-            profit = (final_price - position["entry_price"]) * position["shares"]
-            capital += profit
+            capital += final_price * position["shares"]  # return full proceeds
             trades.append(
                 Trade(
                     entry_date=position["entry_date"],
