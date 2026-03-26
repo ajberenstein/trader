@@ -196,6 +196,125 @@ class ClaudeTradingTools:
         except Exception as e:
             return {"error": f"Failed to run backtest: {str(e)}"}
 
+    def get_order_status(self, order_id: str) -> Dict[str, Any]:
+        """Get status and details of a specific order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.get_order(order_id)
+            if not order:
+                return {"error": f"Order {order_id} not found"}
+            return {
+                "order_id": order.id,
+                "symbol": order.symbol,
+                "quantity": float(order.quantity),
+                "side": order.side,
+                "type": order.order_type,
+                "status": order.status,
+                "filled_qty": float(order.filled_qty),
+                "filled_avg_price": float(order.filled_avg_price),
+                "created_at": str(order.created_at),
+                "updated_at": str(order.updated_at),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get order: {str(e)}"}
+
+    def list_orders(self, status: str = "all", limit: int = 20) -> Dict[str, Any]:
+        """List orders with optional status filter."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            orders = self.trading.list_orders(status=status, limit=limit)
+            if orders is None:
+                return {"error": "Failed to fetch orders"}
+            return {
+                "orders": [
+                    {
+                        "order_id": o.id,
+                        "symbol": o.symbol,
+                        "quantity": float(o.quantity),
+                        "side": o.side,
+                        "type": o.order_type,
+                        "status": o.status,
+                        "filled_qty": float(o.filled_qty),
+                        "filled_avg_price": float(o.filled_avg_price),
+                        "created_at": str(o.created_at),
+                    }
+                    for o in orders
+                ],
+                "count": len(orders),
+            }
+        except Exception as e:
+            return {"error": f"Failed to list orders: {str(e)}"}
+
+    def cancel_order(self, order_id: str) -> Dict[str, Any]:
+        """Cancel a specific open order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            success = self.trading.cancel_order(order_id)
+            if success:
+                return {"cancelled": True, "order_id": order_id}
+            return {"cancelled": False, "order_id": order_id, "error": "Cancel failed"}
+        except Exception as e:
+            return {"error": f"Failed to cancel order: {str(e)}"}
+
+    def cancel_all_orders(self) -> Dict[str, Any]:
+        """Cancel all open orders."""
+        if not self.trading or not self.connector.client:
+            return {"error": "Trading handler not initialized"}
+        try:
+            self.connector.client.cancel_all_orders()
+            return {"cancelled": True}
+        except Exception as e:
+            return {"error": f"Failed to cancel all orders: {str(e)}"}
+
+    def get_positions(self) -> Dict[str, Any]:
+        """Get all open positions."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            positions = self.connector.get_positions()
+            if positions is None:
+                return {"error": "Failed to fetch positions"}
+            return {
+                "positions": [
+                    {
+                        "symbol": p.symbol,
+                        "qty": float(p.qty),
+                        "avg_entry_price": float(p.avg_entry_price),
+                        "current_price": float(p.current_price),
+                        "market_value": float(p.market_value),
+                        "unrealized_pl": float(p.unrealized_pl),
+                        "unrealized_plpc": float(p.unrealized_plpc),
+                    }
+                    for p in positions.values()
+                ],
+                "count": len(positions),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get positions: {str(e)}"}
+
+    def get_position(self, symbol: str) -> Dict[str, Any]:
+        """Get position for a specific symbol."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            p = self.connector.get_position(symbol)
+            if not p:
+                return {"error": f"No open position for {symbol}"}
+            return {
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "avg_entry_price": float(p.avg_entry_price),
+                "current_price": float(p.current_price),
+                "market_value": float(p.market_value),
+                "unrealized_pl": float(p.unrealized_pl),
+                "unrealized_plpc": float(p.unrealized_plpc),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get position: {str(e)}"}
+
     def handle_tool_call(self, tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         """Route tool calls to appropriate handlers."""
         if tool_name == "check_account":
@@ -206,6 +325,18 @@ class ClaudeTradingTools:
             return self.place_order(**tool_input)
         elif tool_name == "backtest_strategy":
             return self.backtest_strategy(**tool_input)
+        elif tool_name == "get_order_status":
+            return self.get_order_status(**tool_input)
+        elif tool_name == "list_orders":
+            return self.list_orders(**tool_input)
+        elif tool_name == "cancel_order":
+            return self.cancel_order(**tool_input)
+        elif tool_name == "cancel_all_orders":
+            return self.cancel_all_orders()
+        elif tool_name == "get_positions":
+            return self.get_positions()
+        elif tool_name == "get_position":
+            return self.get_position(**tool_input)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 

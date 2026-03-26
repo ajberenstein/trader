@@ -107,6 +107,125 @@ class TradingMCPServer:
         except Exception as e:
             return {"error": f"Failed to place order: {str(e)}"}
 
+    async def get_order_status(self, order_id: str) -> dict[str, Any]:
+        """Get status of a specific order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.get_order(order_id)
+            if not order:
+                return {"error": f"Order {order_id} not found"}
+            return {
+                "order_id": order.id,
+                "symbol": order.symbol,
+                "quantity": float(order.quantity),
+                "side": order.side,
+                "type": order.order_type,
+                "status": order.status,
+                "filled_qty": float(order.filled_qty),
+                "filled_avg_price": float(order.filled_avg_price),
+                "created_at": str(order.created_at),
+                "updated_at": str(order.updated_at),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get order: {str(e)}"}
+
+    async def list_orders(self, status: str = "all", limit: int = 20) -> dict[str, Any]:
+        """List orders with optional status filter."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            orders = self.trading.list_orders(status=status, limit=limit)
+            if orders is None:
+                return {"error": "Failed to fetch orders"}
+            return {
+                "orders": [
+                    {
+                        "order_id": o.id,
+                        "symbol": o.symbol,
+                        "quantity": float(o.quantity),
+                        "side": o.side,
+                        "type": o.order_type,
+                        "status": o.status,
+                        "filled_qty": float(o.filled_qty),
+                        "filled_avg_price": float(o.filled_avg_price),
+                        "created_at": str(o.created_at),
+                    }
+                    for o in orders
+                ],
+                "count": len(orders),
+            }
+        except Exception as e:
+            return {"error": f"Failed to list orders: {str(e)}"}
+
+    async def cancel_order(self, order_id: str) -> dict[str, Any]:
+        """Cancel a specific open order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            success = self.trading.cancel_order(order_id)
+            if success:
+                return {"cancelled": True, "order_id": order_id}
+            return {"cancelled": False, "order_id": order_id, "error": "Cancel failed"}
+        except Exception as e:
+            return {"error": f"Failed to cancel order: {str(e)}"}
+
+    async def cancel_all_orders(self) -> dict[str, Any]:
+        """Cancel all open orders."""
+        if not self.trading or not self.connector.client:
+            return {"error": "Trading handler not initialized"}
+        try:
+            self.connector.client.cancel_all_orders()
+            return {"cancelled": True}
+        except Exception as e:
+            return {"error": f"Failed to cancel all orders: {str(e)}"}
+
+    async def get_positions(self) -> dict[str, Any]:
+        """Get all open positions."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            positions = self.connector.get_positions()
+            if positions is None:
+                return {"error": "Failed to fetch positions"}
+            return {
+                "positions": [
+                    {
+                        "symbol": p.symbol,
+                        "qty": float(p.qty),
+                        "avg_entry_price": float(p.avg_entry_price),
+                        "current_price": float(p.current_price),
+                        "market_value": float(p.market_value),
+                        "unrealized_pl": float(p.unrealized_pl),
+                        "unrealized_plpc": float(p.unrealized_plpc),
+                    }
+                    for p in positions.values()
+                ],
+                "count": len(positions),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get positions: {str(e)}"}
+
+    async def get_position(self, symbol: str) -> dict[str, Any]:
+        """Get position for a specific symbol."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            p = self.connector.get_position(symbol)
+            if not p:
+                return {"error": f"No open position for {symbol}"}
+            return {
+                "symbol": p.symbol,
+                "qty": float(p.qty),
+                "avg_entry_price": float(p.avg_entry_price),
+                "current_price": float(p.current_price),
+                "market_value": float(p.market_value),
+                "unrealized_pl": float(p.unrealized_pl),
+                "unrealized_plpc": float(p.unrealized_plpc),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get position: {str(e)}"}
+
     async def backtest_strategy(self, symbol: str, strategy: str, period: str = "1y") -> dict[str, Any]:
         """Run a backtest on a trading strategy."""
         try:
@@ -206,11 +325,54 @@ async def get_market_comparison(symbols: str) -> str:
 
 
 @server.tool()
+async def get_order_status(order_id: str) -> str:
+    """Get the status and details of a specific order by its ID."""
+    result = await trading_server.get_order_status(order_id)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def list_orders(status: str = "all", limit: int = 20) -> str:
+    """List orders. Status can be: all, open, closed, filled, cancelled, pending_new."""
+    result = await trading_server.list_orders(status, limit)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def cancel_order(order_id: str) -> str:
+    """Cancel a specific open order by its ID."""
+    result = await trading_server.cancel_order(order_id)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def cancel_all_orders() -> str:
+    """Cancel all open orders."""
+    result = await trading_server.cancel_all_orders()
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_positions() -> str:
+    """Get all open positions with P&L information."""
+    result = await trading_server.get_positions()
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_position(symbol: str) -> str:
+    """Get the open position for a specific symbol."""
+    result = await trading_server.get_position(symbol)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
 async def health_check() -> str:
     """Check server health and connectivity."""
+    from datetime import datetime, timezone
     health_status = {
         "status": "healthy",
-        "timestamp": "2026-03-24T12:00:00Z",  # Would use datetime in real implementation
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "trading_connection": trading_server.connector is not None,
         "market_data": trading_server.market is not None,
         "version": "1.0.0"
