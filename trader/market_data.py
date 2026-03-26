@@ -157,6 +157,70 @@ class MarketDataHandler:
             "periods_analyzed": len(bars),
         }
 
+    def get_ohlcv(
+        self, symbol: str, timeframe: str = "1Day", limit: int = 50
+    ) -> Optional[List[dict]]:
+        """Return OHLCV bars as a list of dicts."""
+        bars = self.get_historical_bars(symbol, timeframe=timeframe, limit=limit)
+        if not bars:
+            return None
+        return [
+            {
+                "timestamp": bar.timestamp.isoformat(),
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+            }
+            for bar in bars
+        ]
+
+    def get_quote(self, symbol: str) -> Optional[dict]:
+        """Return latest bid/ask quote."""
+        if not self.connector.is_connected or not self.connector.client:
+            return None
+        try:
+            quote = self.connector.client.get_latest_quote(symbol, feed="iex")
+            raw = getattr(quote, "_raw", {})
+            bid = float(raw.get("bp", 0))
+            ask = float(raw.get("ap", 0))
+            return {
+                "symbol": symbol,
+                "bid": bid,
+                "ask": ask,
+                "spread": round(ask - bid, 4),
+                "bid_size": int(raw.get("bs", 0)),
+                "ask_size": int(raw.get("as", 0)),
+            }
+        except Exception as e:
+            logger.error(f"Error fetching quote for {symbol}: {str(e)}")
+            return None
+
+    def search_symbols(self, query: str, limit: int = 10) -> Optional[List[dict]]:
+        """Search tradable US equity symbols by ticker or company name."""
+        if not self.connector.is_connected or not self.connector.client:
+            return None
+        try:
+            assets = self.connector.client.list_assets(
+                status="active", asset_class="us_equity"
+            )
+            q = query.lower()
+            results = [
+                {
+                    "symbol": a.symbol,
+                    "name": getattr(a, "name", ""),
+                    "exchange": getattr(a, "exchange", ""),
+                    "tradable": getattr(a, "tradable", False),
+                }
+                for a in assets
+                if q in a.symbol.lower() or q in (getattr(a, "name", "") or "").lower()
+            ]
+            return results[:limit]
+        except Exception as e:
+            logger.error(f"Error searching symbols: {str(e)}")
+            return None
+
     def compare_symbols(
         self, symbols: List[str], timeframe: str = "1Day", limit: int = 100
     ) -> Optional[dict]:

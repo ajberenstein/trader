@@ -25,7 +25,7 @@ from uvicorn import Config, Server as UvicornServer
 
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
-from trader.data_utils import fetch_yahoo_data
+from trader.data_utils import fetch_yahoo_data, get_fundamentals
 from trader import Backtester, SimpleDipStrategy, MomentumStrategy
 from mcp_auth import SimpleTokenOAuthProvider, make_auth_settings
 
@@ -236,6 +236,157 @@ class TradingMCPServer:
         except Exception as e:
             return {"error": f"Failed to get position: {str(e)}"}
 
+    async def place_limit_order(self, symbol: str, quantity: float, side: str, limit_price: float) -> dict[str, Any]:
+        """Place a limit order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.place_limit_order(symbol, quantity, side, limit_price)
+            if not order:
+                return {"error": "Failed to place limit order"}
+            return {"order_id": order.id, "status": order.status, "symbol": order.symbol,
+                    "quantity": float(order.quantity), "side": order.side, "type": order.order_type,
+                    "limit_price": limit_price}
+        except Exception as e:
+            return {"error": f"Failed to place limit order: {str(e)}"}
+
+    async def place_stop_order(self, symbol: str, quantity: float, side: str, stop_price: float) -> dict[str, Any]:
+        """Place a stop order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.place_stop_order(symbol, quantity, side, stop_price)
+            if not order:
+                return {"error": "Failed to place stop order"}
+            return {"order_id": order.id, "status": order.status, "symbol": order.symbol,
+                    "quantity": float(order.quantity), "side": order.side, "type": order.order_type,
+                    "stop_price": stop_price}
+        except Exception as e:
+            return {"error": f"Failed to place stop order: {str(e)}"}
+
+    async def place_bracket_order(
+        self, symbol: str, quantity: float, side: str,
+        take_profit_price: float, stop_loss_price: float
+    ) -> dict[str, Any]:
+        """Place a bracket order (entry + take-profit + stop-loss)."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.place_bracket_order(symbol, quantity, side, take_profit_price, stop_loss_price)
+            if not order:
+                return {"error": "Failed to place bracket order"}
+            return {"order_id": order.id, "status": order.status, "symbol": order.symbol,
+                    "quantity": float(order.quantity), "side": order.side,
+                    "take_profit_price": take_profit_price, "stop_loss_price": stop_loss_price}
+        except Exception as e:
+            return {"error": f"Failed to place bracket order: {str(e)}"}
+
+    async def modify_order(self, order_id: str, qty: float = None, limit_price: float = None, stop_price: float = None) -> dict[str, Any]:
+        """Modify an open order."""
+        if not self.trading:
+            return {"error": "Trading handler not initialized"}
+        try:
+            order = self.trading.modify_order(order_id, qty=qty, limit_price=limit_price, stop_price=stop_price)
+            if not order:
+                return {"error": f"Failed to modify order {order_id}"}
+            return {"order_id": order.id, "status": order.status, "symbol": order.symbol,
+                    "quantity": float(order.quantity), "type": order.order_type}
+        except Exception as e:
+            return {"error": f"Failed to modify order: {str(e)}"}
+
+    async def get_ohlcv(self, symbol: str, timeframe: str = "1Day", limit: int = 50) -> dict[str, Any]:
+        """Get OHLCV bars."""
+        if not self.market:
+            return {"error": "Market data handler not initialized"}
+        try:
+            bars = self.market.get_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            if bars is None:
+                return {"error": f"No data for {symbol}"}
+            return {"symbol": symbol, "timeframe": timeframe, "bars": bars, "count": len(bars)}
+        except Exception as e:
+            return {"error": f"Failed to get OHLCV: {str(e)}"}
+
+    async def get_quote(self, symbol: str) -> dict[str, Any]:
+        """Get latest bid/ask quote."""
+        if not self.market:
+            return {"error": "Market data handler not initialized"}
+        try:
+            quote = self.market.get_quote(symbol)
+            if quote is None:
+                return {"error": f"No quote available for {symbol}"}
+            return quote
+        except Exception as e:
+            return {"error": f"Failed to get quote: {str(e)}"}
+
+    async def get_fundamentals_data(self, symbol: str) -> dict[str, Any]:
+        """Get fundamental data via Yahoo Finance."""
+        try:
+            data = get_fundamentals(symbol)
+            if data is None:
+                return {"error": f"No fundamental data for {symbol}"}
+            return data
+        except Exception as e:
+            return {"error": f"Failed to get fundamentals: {str(e)}"}
+
+    async def search_symbols_data(self, query: str) -> dict[str, Any]:
+        """Search symbols by name or ticker."""
+        if not self.market:
+            return {"error": "Market data handler not initialized"}
+        try:
+            results = self.market.search_symbols(query)
+            if results is None:
+                return {"error": "Search failed"}
+            return {"query": query, "results": results, "count": len(results)}
+        except Exception as e:
+            return {"error": f"Failed to search symbols: {str(e)}"}
+
+    async def get_portfolio_history_data(self, period: str = "1M", timeframe: str = "1D") -> dict[str, Any]:
+        """Get portfolio equity history."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            history = self.connector.get_portfolio_history(period=period, timeframe=timeframe)
+            if history is None:
+                return {"error": "Failed to fetch portfolio history"}
+            return history
+        except Exception as e:
+            return {"error": f"Failed to get portfolio history: {str(e)}"}
+
+    async def get_pnl_summary(self) -> dict[str, Any]:
+        """Get P&L summary from account and open positions."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            account = self.connector.get_account()
+            positions = self.connector.get_positions() or {}
+            unrealized_pl = sum(p.unrealized_pl for p in positions.values())
+            unrealized_plpc = (
+                sum(p.unrealized_plpc for p in positions.values()) / len(positions)
+                if positions else 0.0
+            )
+            return {
+                "cash": float(account.cash),
+                "portfolio_value": float(account.portfolio_value),
+                "buying_power": float(account.buying_power),
+                "open_positions": len(positions),
+                "unrealized_pl": round(unrealized_pl, 2),
+                "unrealized_pl_pct": round(float(unrealized_plpc) * 100, 2),
+            }
+        except Exception as e:
+            return {"error": f"Failed to get P&L summary: {str(e)}"}
+
+    async def get_trade_history_data(self, limit: int = 50) -> dict[str, Any]:
+        """Get recent executed trades."""
+        if not self.connector:
+            return {"error": "Trading connector not initialized"}
+        try:
+            trades = self.connector.get_trade_history(limit=limit)
+            if trades is None:
+                return {"error": "Failed to fetch trade history"}
+            return {"trades": trades, "count": len(trades)}
+        except Exception as e:
+            return {"error": f"Failed to get trade history: {str(e)}"}
+
     async def backtest_strategy(self, symbol: str, strategy: str, period: str = "1y") -> dict[str, Any]:
         """Run a backtest on a trading strategy."""
         try:
@@ -394,6 +545,176 @@ async def get_positions() -> str:
 async def get_position(symbol: str) -> str:
     """Get the open position for a specific symbol."""
     result = await trading_server.get_position(symbol)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def place_limit_order(symbol: str, quantity: float, side: str, limit_price: float) -> str:
+    """Place a limit order. Executes only if the market reaches limit_price."""
+    result = await trading_server.place_limit_order(symbol, quantity, side, limit_price)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def place_stop_order(symbol: str, quantity: float, side: str, stop_price: float) -> str:
+    """Place a stop order. Triggers a market order when price reaches stop_price."""
+    result = await trading_server.place_stop_order(symbol, quantity, side, stop_price)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def place_bracket_order(
+    symbol: str, quantity: float, side: str,
+    take_profit_price: float, stop_loss_price: float
+) -> str:
+    """Place a bracket order: market entry with automatic take-profit and stop-loss legs."""
+    result = await trading_server.place_bracket_order(symbol, quantity, side, take_profit_price, stop_loss_price)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def modify_order(order_id: str, qty: float = None, limit_price: float = None, stop_price: float = None) -> str:
+    """Modify an open order's quantity, limit price, or stop price."""
+    result = await trading_server.modify_order(order_id, qty=qty, limit_price=limit_price, stop_price=stop_price)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_ohlcv(symbol: str, timeframe: str = "1Day", limit: int = 50) -> str:
+    """Get OHLCV candlestick bars. Timeframes: 1Min, 5Min, 15Min, 1Hour, 1Day."""
+    result = await trading_server.get_ohlcv(symbol, timeframe, limit)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_quote(symbol: str) -> str:
+    """Get real-time bid/ask quote with spread for a symbol."""
+    result = await trading_server.get_quote(symbol)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_fundamentals(symbol: str) -> str:
+    """Get fundamental data: P/E ratio, EPS, market cap, sector, 52-week range, etc."""
+    result = await trading_server.get_fundamentals_data(symbol)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def search_symbols(query: str) -> str:
+    """Search for tradable US equity symbols by company name or ticker prefix."""
+    result = await trading_server.search_symbols_data(query)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def list_strategies() -> str:
+    """List all available backtesting strategies with descriptions."""
+    strategies = {
+        "strategies": [
+            {
+                "name": "simple_dip",
+                "description": "Buys when price drops significantly below its recent average, sells on recovery.",
+            },
+            {
+                "name": "momentum",
+                "description": "Buys when price is trending up (short MA > long MA), sells when trend reverses.",
+            },
+        ]
+    }
+    return json.dumps(strategies, indent=2)
+
+
+@server.tool()
+async def get_backtest_trades(symbol: str, strategy: str, period: str = "1y") -> str:
+    """Run a backtest and return the individual trade-by-trade detail."""
+    try:
+        period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+        days = period_days.get(period, 365)
+        data = fetch_yahoo_data(symbol, days=days)
+        if strategy == "simple_dip":
+            from trader import SimpleDipStrategy
+            strat = SimpleDipStrategy()
+        elif strategy == "momentum":
+            from trader import MomentumStrategy
+            strat = MomentumStrategy()
+        else:
+            return json.dumps({"error": f"Unknown strategy: {strategy}"})
+        from trader import Backtester
+        results = Backtester(initial_capital=10000).run(symbol, data, strat)
+        trades = [
+            {
+                "entry_date": t.entry_date.isoformat(),
+                "entry_price": round(t.entry_price, 4),
+                "exit_date": t.exit_date.isoformat(),
+                "exit_price": round(t.exit_price, 4),
+                "shares": t.shares,
+                "profit": round(t.profit, 2),
+                "return_pct": round(t.return_pct, 2),
+                "duration_days": t.duration_days,
+            }
+            for t in results.trades
+        ]
+        return json.dumps({
+            "symbol": symbol, "strategy": strategy, "period": period,
+            "total_return_pct": round(float(results.total_profit_pct), 2),
+            "num_trades": results.num_trades,
+            "trades": trades,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to get backtest trades: {str(e)}"})
+
+
+@server.tool()
+async def backtest_multi_symbol(symbols: str, strategy: str, period: str = "1y") -> str:
+    """Run the same strategy across multiple symbols. symbols is comma-separated (e.g. 'AAPL,MSFT,TSLA')."""
+    try:
+        period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+        days = period_days.get(period, 365)
+        if strategy == "simple_dip":
+            from trader import SimpleDipStrategy as Strat
+        elif strategy == "momentum":
+            from trader import MomentumStrategy as Strat
+        else:
+            return json.dumps({"error": f"Unknown strategy: {strategy}"})
+        from trader import Backtester
+        backtester = Backtester(initial_capital=10000)
+        results = {}
+        for sym in [s.strip() for s in symbols.split(",")]:
+            data = fetch_yahoo_data(sym, days=days)
+            if not data:
+                results[sym] = {"error": "No data available"}
+                continue
+            r = backtester.run(sym, data, Strat())
+            results[sym] = {
+                "total_return_pct": round(float(r.total_profit_pct), 2),
+                "num_trades": r.num_trades,
+                "win_rate_pct": round(float(r.win_rate_pct), 2),
+                "max_drawdown_pct": round(float(r.max_drawdown_pct), 2),
+            }
+        return json.dumps({"strategy": strategy, "period": period, "results": results}, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to run multi-symbol backtest: {str(e)}"})
+
+
+@server.tool()
+async def get_portfolio_history(period: str = "1M", timeframe: str = "1D") -> str:
+    """Get portfolio equity curve. period: 1D,1W,1M,3M,6M,1A,all. timeframe: 1Min,5Min,15Min,1H,1D."""
+    result = await trading_server.get_portfolio_history_data(period, timeframe)
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_pnl_summary() -> str:
+    """Get P&L summary: cash, portfolio value, unrealized gains/losses across all open positions."""
+    result = await trading_server.get_pnl_summary()
+    return json.dumps(result, indent=2)
+
+
+@server.tool()
+async def get_trade_history(limit: int = 50) -> str:
+    """Get history of executed trades (fills) ordered by most recent first."""
+    result = await trading_server.get_trade_history_data(limit)
     return json.dumps(result, indent=2)
 
 

@@ -2,7 +2,8 @@
 
 from alpaca_trade_api import REST
 from alpaca_trade_api.entity import Order as AlpacaOrder, Position as AlpacaPosition
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
+from datetime import datetime
 import logging
 from .config import Config
 from .models import Account, Order, Position
@@ -150,6 +151,57 @@ class AlpacaConnector:
             )
         except Exception as e:
             logger.error(f"Error fetching position for {symbol}: {str(e)}")
+            return None
+
+    def get_portfolio_history(self, period: str = "1M", timeframe: str = "1D") -> Optional[dict]:
+        """Return equity curve for the account."""
+        if not self.is_connected or not self.client:
+            return None
+        try:
+            history = self.client.get_portfolio_history(period=period, timeframe=timeframe)
+            timestamps = history.timestamp or []
+            equity = history.equity or []
+            profit_loss = history.profit_loss or []
+            profit_loss_pct = history.profit_loss_pct or []
+            data = [
+                {
+                    "timestamp": datetime.fromtimestamp(ts).isoformat(),
+                    "equity": float(eq) if eq is not None else None,
+                    "profit_loss": float(pl) if pl is not None else None,
+                    "profit_loss_pct": float(plp) if plp is not None else None,
+                }
+                for ts, eq, pl, plp in zip(timestamps, equity, profit_loss, profit_loss_pct)
+            ]
+            return {
+                "period": period,
+                "timeframe": timeframe,
+                "base_value": float(history.base_value),
+                "data": data,
+            }
+        except Exception as e:
+            logger.error(f"Error fetching portfolio history: {str(e)}")
+            return None
+
+    def get_trade_history(self, limit: int = 50) -> Optional[List[dict]]:
+        """Return recent fill activities (executed trades)."""
+        if not self.is_connected or not self.client:
+            return None
+        try:
+            activities = self.client.get_activities(activity_type="FILL")
+            result = []
+            for a in list(activities)[:limit]:
+                result.append({
+                    "id": getattr(a, "id", None),
+                    "symbol": getattr(a, "symbol", None),
+                    "side": getattr(a, "side", None),
+                    "quantity": float(getattr(a, "qty", 0) or 0),
+                    "price": float(getattr(a, "price", 0) or 0),
+                    "transaction_time": str(getattr(a, "transaction_time", "")),
+                    "order_id": getattr(a, "order_id", None),
+                })
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching trade history: {str(e)}")
             return None
 
     def disconnect(self):

@@ -65,3 +65,38 @@ def fetch_yahoo_data(
     except Exception as e:
         logger.error(f"Error fetching data from Yahoo Finance: {str(e)}")
         return None
+
+
+def get_fundamentals(symbol: str) -> Optional[dict]:
+    """
+    Fetch fundamental data for a symbol via Yahoo Finance.
+
+    Returns P/E, EPS, market cap, sector, 52-week range, etc.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        logger.error("yfinance not installed. Run: pip install yfinance")
+        return None
+
+    try:
+        info = yf.Ticker(symbol).info
+        return {
+            "symbol": symbol,
+            "name": info.get("longName") or info.get("shortName"),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "market_cap": info.get("marketCap"),
+            "pe_ratio": info.get("trailingPE"),
+            "forward_pe": info.get("forwardPE"),
+            "eps": info.get("trailingEps"),
+            "revenue": info.get("totalRevenue"),
+            "profit_margin": info.get("profitMargins"),
+            "52w_high": info.get("fiftyTwoWeekHigh"),
+            "52w_low": info.get("fiftyTwoWeekLow"),
+            "dividend_yield": info.get("dividendYield"),
+            "beta": info.get("beta"),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching fundamentals for {symbol}: {str(e)}")
+        return None

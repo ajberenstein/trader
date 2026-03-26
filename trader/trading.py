@@ -188,6 +188,90 @@ class TradingHandler:
             logger.error(f"Error cancelling order {order_id}: {str(e)}")
             return False
 
+    def place_limit_order(self, symbol: str, quantity: float, side: str, limit_price: float) -> Optional[Order]:
+        """Place a limit order (GTC)."""
+        req = OrderRequest(
+            symbol=symbol, quantity=quantity, side=side,
+            order_type="limit", limit_price=limit_price, time_in_force="gtc"
+        )
+        return self.place_order(req)
+
+    def place_stop_order(self, symbol: str, quantity: float, side: str, stop_price: float) -> Optional[Order]:
+        """Place a stop order (GTC)."""
+        req = OrderRequest(
+            symbol=symbol, quantity=quantity, side=side,
+            order_type="stop", stop_price=stop_price, time_in_force="gtc"
+        )
+        return self.place_order(req)
+
+    def place_bracket_order(
+        self, symbol: str, quantity: float, side: str,
+        take_profit_price: float, stop_loss_price: float
+    ) -> Optional[Order]:
+        """Place a bracket order (market entry + take-profit limit + stop-loss)."""
+        if not self.connector.is_connected or not self.connector.client:
+            return None
+        try:
+            order = self.connector.client.submit_order(
+                symbol=symbol,
+                qty=quantity,
+                side=side,
+                type="market",
+                time_in_force="gtc",
+                order_class="bracket",
+                take_profit={"limit_price": take_profit_price},
+                stop_loss={"stop_price": stop_loss_price},
+            )
+            return Order(
+                id=order.id,
+                symbol=order.symbol,
+                quantity=float(order.qty),
+                side=order.side,
+                order_type=order.order_type,
+                status=order.status,
+                filled_qty=float(order.filled_qty),
+                filled_avg_price=float(order.filled_avg_price or 0),
+                created_at=order.created_at,
+                updated_at=order.updated_at,
+            )
+        except Exception as e:
+            logger.error(f"Error placing bracket order: {str(e)}")
+            return None
+
+    def modify_order(
+        self, order_id: str,
+        qty: Optional[float] = None,
+        limit_price: Optional[float] = None,
+        stop_price: Optional[float] = None,
+    ) -> Optional[Order]:
+        """Replace/modify an open order."""
+        if not self.connector.is_connected or not self.connector.client:
+            return None
+        try:
+            kwargs: Dict = {}
+            if qty is not None:
+                kwargs["qty"] = qty
+            if limit_price is not None:
+                kwargs["limit_price"] = limit_price
+            if stop_price is not None:
+                kwargs["stop_price"] = stop_price
+            order = self.connector.client.replace_order(order_id, **kwargs)
+            return Order(
+                id=order.id,
+                symbol=order.symbol,
+                quantity=float(order.qty),
+                side=order.side,
+                order_type=order.order_type,
+                status=order.status,
+                filled_qty=float(order.filled_qty),
+                filled_avg_price=float(order.filled_avg_price or 0),
+                created_at=order.created_at,
+                updated_at=order.updated_at,
+            )
+        except Exception as e:
+            logger.error(f"Error modifying order {order_id}: {str(e)}")
+            return None
+
     def buy(self, symbol: str, quantity: float) -> Optional[Order]:
         """
         Convenience method to buy shares.

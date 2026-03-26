@@ -2,7 +2,7 @@
 
 import logging
 from typing import List, Dict, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from .models import PriceData
 from .strategy import Strategy
@@ -56,6 +56,7 @@ class BacktestResult:
     avg_win: float
     avg_loss: float
     max_drawdown_pct: float
+    trades: List[Trade] = field(default_factory=list)
     sharpe_ratio: Optional[float] = None
 
     def __str__(self) -> str:
@@ -205,6 +206,7 @@ class Backtester:
             avg_win=avg_win,
             avg_loss=abs(avg_loss),
             max_drawdown_pct=max_drawdown,
+            trades=trades,
         )
 
     @staticmethod
