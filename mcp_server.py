@@ -19,13 +19,23 @@ from typing import Any, Sequence
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.routing import Route
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse, RedirectResponse
+from starlette.requests import Request
 from uvicorn import Config, Server as UvicornServer
 
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
 from trader.data_utils import fetch_yahoo_data
 from trader import Backtester, SimpleDipStrategy, MomentumStrategy
+from mcp_auth import SimpleTokenOAuthProvider, make_auth_settings
+
+SERVER_URL = os.environ.get("MCP_SERVER_URL", "https://trader.137-184-12-167.sslip.io")
+MCP_ACCESS_TOKEN = os.environ.get("MCP_ACCESS_TOKEN", "")
+
+oauth_provider = SimpleTokenOAuthProvider(
+    valid_token=MCP_ACCESS_TOKEN,
+    server_url=SERVER_URL,
+)
 
 class TradingMCPServer:
     """MCP Server that provides trading tools to Claude."""
@@ -259,14 +269,19 @@ class TradingMCPServer:
             return {"error": f"Failed to run backtest: {str(e)}"}
 
 
-# Create MCP server instance — allow external host (behind Caddy reverse proxy)
-server = FastMCP("trading-tools", transport_security=TransportSecuritySettings(
-    allowed_hosts=["trader.137-184-12-167.sslip.io", "127.0.0.1:*", "localhost:*", "[::1]:*"]
-))
+# Create MCP server instance
+server = FastMCP(
+    "trading-tools",
+    auth_server_provider=oauth_provider,
+    auth=make_auth_settings(SERVER_URL),
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=["trader.137-184-12-167.sslip.io", "127.0.0.1:*", "localhost:*", "[::1]:*"]
+    ),
+)
 trading_server = TradingMCPServer()
 
 
-async def health_endpoint(request):
+async def health_endpoint(request: Request):
     """HTTP health check endpoint."""
     return JSONResponse({
         "status": "healthy",
@@ -276,10 +291,26 @@ async def health_endpoint(request):
     })
 
 
+async def login_get(request: Request):
+    """Show the token login form."""
+    return HTMLResponse(oauth_provider.login_form(dict(request.query_params)))
+
+
+async def login_post(request: Request):
+    """Handle token submission, redirect back to Claude with auth code."""
+    form = dict(await request.form())
+    redirect_url, error = oauth_provider.validate_and_create_code(form)
+    if error:
+        return HTMLResponse(oauth_provider.login_form(form, error=error), status_code=401)
+    return RedirectResponse(redirect_url, status_code=302)
+
+
 # Use FastMCP's own Starlette app directly (preserves lifespan/task group init).
-# Add /health as a route on the same app.
+# Add /health and /login routes on the same app.
 app = server.streamable_http_app()
 app.routes.insert(0, Route("/health", health_endpoint))
+app.routes.insert(1, Route("/login", login_get, methods=["GET"]))
+app.routes.insert(2, Route("/login", login_post, methods=["POST"]))
 
 
 @server.tool()
