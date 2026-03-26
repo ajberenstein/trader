@@ -94,7 +94,7 @@ class SimpleTokenOAuthProvider(OAuthAuthorizationServerProvider):
             "redirect_uri": str(params.redirect_uri),
             "state": params.state or "",
             "code_challenge": params.code_challenge or "",
-            "code_challenge_method": params.code_challenge_method or "S256",
+            "code_challenge_method": "S256",
         })
         return f"{self.server_url}/login?{qs}"
 
