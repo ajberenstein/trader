@@ -25,7 +25,7 @@ from uvicorn import Config, Server as UvicornServer
 
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
-from trader.data_utils import fetch_yahoo_data, get_fundamentals
+from trader.data_utils import fetch_yahoo_data, fetch_yahoo_intraday, get_fundamentals
 from trader import Backtester, create_strategy, STRATEGY_REGISTRY
 from mcp_auth import SimpleTokenOAuthProvider, make_auth_settings
 
@@ -427,11 +427,12 @@ server = FastMCP(
 )
 trading_server = TradingMCPServer()
 
-# Bars per trading day for each intraday timeframe (US market = 6.5h)
-_BARS_PER_DAY = {"1Min": 390, "5Min": 78, "15Min": 26, "1Hour": 7}
-# Period string → trading days (for intraday) or calendar days (for daily)
-_INTRADAY_TRADING_DAYS = {"1d": 1, "3d": 3, "1w": 5, "2w": 10, "1m": 21, "3m": 63, "6m": 126}
-_DAILY_CALENDAR_DAYS   = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+# Period string → calendar days
+_DAILY_CALENDAR_DAYS    = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
+_INTRADAY_CALENDAR_DAYS = {"1d": 1, "3d": 3, "1w": 7, "2w": 14, "1m": 30, "3m": 90, "6m": 180}
+
+# Alpaca timeframe string → yfinance interval string
+_TF_TO_YF = {"1Min": "1m", "5Min": "5m", "15Min": "15m", "1Hour": "1h"}
 
 
 def _fetch_backtest_data(symbol: str, period: str, timeframe: str = "1Day"):
@@ -439,29 +440,25 @@ def _fetch_backtest_data(symbol: str, period: str, timeframe: str = "1Day"):
     Fetch OHLCV bars for backtesting from the appropriate source.
 
     Daily (timeframe="1Day"):
-        Uses Yahoo Finance — free, unlimited history.
+        Source: Yahoo Finance — free, deep history.
         period: "1m" | "3m" | "6m" | "1y" | "2y"
 
-    Intraday (timeframe="1Min" | "5Min" | "15Min" | "1Hour"):
-        Uses Alpaca IEX feed. History limited by Alpaca free-tier.
-        period controls how many trading days to fetch:
-            "1d"=1 day | "3d"=3 days | "1w"=1 week | "2w"=2 weeks |
-            "1m"=1 month | "3m"=3 months | "6m"=6 months
-        Example bar counts:
-            1Hour / 1w  → ~35 bars
-            5Min  / 1w  → ~390 bars
-            1Min  / 1w  → ~1950 bars  (use sparingly, large dataset)
+    Intraday (timeframe="1Hour" | "15Min" | "5Min" | "1Min"):
+        Source: Yahoo Finance intraday — free, with these hard limits:
+            "1Hour" → up to 2 years history
+            "15Min" / "5Min" → up to 60 days history
+            "1Min"  → up to 7 days history
+        period: "1d" | "3d" | "1w" | "2w" | "1m" | "3m" | "6m"
+        (requests are capped automatically to Yahoo's limit for the interval)
     """
     if timeframe == "1Day":
         days = _DAILY_CALENDAR_DAYS.get(period, 365)
         return fetch_yahoo_data(symbol, days=days)
-    # Intraday → Alpaca
-    if not trading_server.market:
+    yf_interval = _TF_TO_YF.get(timeframe)
+    if not yf_interval:
         return None
-    td = _INTRADAY_TRADING_DAYS.get(period, 5)
-    bpd = _BARS_PER_DAY.get(timeframe, 78)
-    limit = min(bpd * td, 10000)
-    return trading_server.market.get_historical_bars(symbol, timeframe=timeframe, limit=limit)
+    days = _INTRADAY_CALENDAR_DAYS.get(period, 7)
+    return fetch_yahoo_intraday(symbol, interval=yf_interval, days=days)
 
 
 async def health_endpoint(request: Request):
