@@ -1,7 +1,10 @@
 {
   "mcpServers": {
     "trader": {
-      "url": "https://trader.137-184-12-167.sslip.io/mcp"
+      "url": "https://trader.137-184-12-167.sslip.io/mcp",
+      "headers": {
+        "Authorization": "Bearer BgV2Wt87gGMvzvYm_hsHtEURHATDE9PxIOp0dI_EFDY"
+      }
     }
   }
 }
