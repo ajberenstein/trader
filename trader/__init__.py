@@ -7,7 +7,13 @@ from .alpaca_connector import AlpacaConnector
 from .market_data import MarketDataHandler
 from .trading import TradingHandler
 from .backtester import Backtester, BacktestResult, Trade
-from .strategy import Strategy, SimpleDipStrategy, MomentumStrategy
+from .strategy import (
+    Strategy, SimpleDipStrategy, MomentumStrategy,
+    RSIOversoldStrategy, BollingerBandsStrategy, MACDCrossoverStrategy,
+    MeanReversionStrategy, MACrossoverStrategy,
+    QualityDipStrategy, GrowthMomentumStrategy, LowBetaReversionStrategy,
+    STRATEGY_REGISTRY, create_strategy,
+)
 from .models import OrderRequest, PriceData, Position
 
 __version__ = "0.1.0"
@@ -21,6 +27,16 @@ __all__ = [
     "Strategy",
     "SimpleDipStrategy",
     "MomentumStrategy",
+    "RSIOversoldStrategy",
+    "BollingerBandsStrategy",
+    "MACDCrossoverStrategy",
+    "MeanReversionStrategy",
+    "MACrossoverStrategy",
+    "QualityDipStrategy",
+    "GrowthMomentumStrategy",
+    "LowBetaReversionStrategy",
+    "STRATEGY_REGISTRY",
+    "create_strategy",
     "OrderRequest",
     "PriceData",
     "Position",

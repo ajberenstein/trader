@@ -26,7 +26,7 @@ from uvicorn import Config, Server as UvicornServer
 # Import our trading modules
 from trader import AlpacaConnector, MarketDataHandler, TradingHandler
 from trader.data_utils import fetch_yahoo_data, get_fundamentals
-from trader import Backtester, SimpleDipStrategy, MomentumStrategy
+from trader import Backtester, create_strategy, STRATEGY_REGISTRY
 from mcp_auth import SimpleTokenOAuthProvider, make_auth_settings
 
 SERVER_URL = os.environ.get("MCP_SERVER_URL", "https://trader.137-184-12-167.sslip.io")
@@ -396,11 +396,9 @@ class TradingMCPServer:
             data = fetch_yahoo_data(symbol, days=days)
 
             # Select strategy
-            if strategy == "simple_dip":
-                strat = SimpleDipStrategy()
-            elif strategy == "momentum":
-                strat = MomentumStrategy()
-            else:
+            fundamentals = get_fundamentals(symbol) if STRATEGY_REGISTRY.get(strategy, {}).get("needs_fundamentals") else None
+            strat = create_strategy(strategy, fundamentals=fundamentals)
+            if strat is None:
                 return {"error": f"Unknown strategy: {strategy}"}
 
             # Run backtest
@@ -609,20 +607,18 @@ async def search_symbols(query: str) -> str:
 
 @server.tool()
 async def list_strategies() -> str:
-    """List all available backtesting strategies with descriptions."""
-    strategies = {
-        "strategies": [
-            {
-                "name": "simple_dip",
-                "description": "Buys when price drops significantly below its recent average, sells on recovery.",
-            },
-            {
-                "name": "momentum",
-                "description": "Buys when price is trending up (short MA > long MA), sells when trend reverses.",
-            },
-        ]
-    }
-    return json.dumps(strategies, indent=2)
+    """List all available backtesting strategies with descriptions, type, and minimum bars required."""
+    strategies = [
+        {
+            "name": name,
+            "type": meta["type"],
+            "description": meta["description"],
+            "needs_fundamentals": meta["needs_fundamentals"],
+            "min_bars_required": meta["min_bars"],
+        }
+        for name, meta in STRATEGY_REGISTRY.items()
+    ]
+    return json.dumps({"strategies": strategies, "count": len(strategies)}, indent=2)
 
 
 @server.tool()
@@ -632,15 +628,10 @@ async def get_backtest_trades(symbol: str, strategy: str, period: str = "1y") ->
         period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
         days = period_days.get(period, 365)
         data = fetch_yahoo_data(symbol, days=days)
-        if strategy == "simple_dip":
-            from trader import SimpleDipStrategy
-            strat = SimpleDipStrategy()
-        elif strategy == "momentum":
-            from trader import MomentumStrategy
-            strat = MomentumStrategy()
-        else:
+        fundamentals = get_fundamentals(symbol) if STRATEGY_REGISTRY.get(strategy, {}).get("needs_fundamentals") else None
+        strat = create_strategy(strategy, fundamentals=fundamentals)
+        if strat is None:
             return json.dumps({"error": f"Unknown strategy: {strategy}"})
-        from trader import Backtester
         results = Backtester(initial_capital=10000).run(symbol, data, strat)
         trades = [
             {
@@ -671,13 +662,9 @@ async def backtest_multi_symbol(symbols: str, strategy: str, period: str = "1y")
     try:
         period_days = {"1m": 30, "3m": 90, "6m": 180, "1y": 365, "2y": 730}
         days = period_days.get(period, 365)
-        if strategy == "simple_dip":
-            from trader import SimpleDipStrategy as Strat
-        elif strategy == "momentum":
-            from trader import MomentumStrategy as Strat
-        else:
+        if strategy not in STRATEGY_REGISTRY:
             return json.dumps({"error": f"Unknown strategy: {strategy}"})
-        from trader import Backtester
+        needs_fundamentals = STRATEGY_REGISTRY[strategy]["needs_fundamentals"]
         backtester = Backtester(initial_capital=10000)
         results = {}
         for sym in [s.strip() for s in symbols.split(",")]:
@@ -685,7 +672,9 @@ async def backtest_multi_symbol(symbols: str, strategy: str, period: str = "1y")
             if not data:
                 results[sym] = {"error": "No data available"}
                 continue
-            r = backtester.run(sym, data, Strat())
+            fundamentals = get_fundamentals(sym) if needs_fundamentals else None
+            strat = create_strategy(strategy, fundamentals=fundamentals)
+            r = backtester.run(sym, data, strat)
             results[sym] = {
                 "total_return_pct": round(float(r.total_profit_pct), 2),
                 "num_trades": r.num_trades,
