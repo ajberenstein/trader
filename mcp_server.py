@@ -16,9 +16,7 @@ import asyncio
 import json
 import os
 from typing import Any, Sequence
-from mcp import Server, Tool
-from mcp.types import TextContent, PromptMessage
-import mcp.server
+from mcp.server.fastmcp import FastMCP
 from fastapi import FastAPI
 from uvicorn import Config, Server as UvicornServer
 import threading
@@ -35,7 +33,7 @@ class TradingMCPServer:
         self.connector = None
         self.market = None
         self.trading = None
-        self.backtester = Backtester(initial_cash=10000)
+        self.backtester = Backtester(initial_capital=10000)
 
     async def initialize_trading(self) -> bool:
         """Initialize trading connections."""
@@ -140,11 +138,12 @@ class TradingMCPServer:
 
 
 # Create MCP server instance
-server = Server("trading-tools")
+server = FastMCP("trading-tools")
 trading_server = TradingMCPServer()
 
-# Create FastAPI app for health checks
+# Create FastAPI app for health checks and MCP endpoint
 app = FastAPI(title="Trader MCP Health Check")
+app.mount("/mcp", server.streamable_http_app())
 
 
 @app.get("/health")
@@ -221,16 +220,6 @@ async def run_http_server():
     await http_server.serve()
 
 
-async def run_mcp_server():
-    """Run the MCP server."""
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            server.create_initialization_options()
-        )
-
-
 async def main():
     """Main function."""
     print("🤖 Starting Trader MCP Server with Health Check")
@@ -242,14 +231,11 @@ async def main():
         return
 
     print("✅ Trading connections initialized successfully!")
-    print("🚀 Server ready for Claude for Work connections")
-    print("📊 Health check available at: http://localhost:8000/health")
+    print("🚀 Server ready for Claude Code connections")
+    print("📊 Health check: http://0.0.0.0:8080/health")
+    print("🔌 MCP endpoint: http://0.0.0.0:8080/mcp")
 
-    # Run both servers concurrently
-    await asyncio.gather(
-        run_http_server(),
-        run_mcp_server()
-    )
+    await run_http_server()
 
 
 if __name__ == "__main__":
