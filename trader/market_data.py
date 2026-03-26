@@ -68,6 +68,7 @@ class MarketDataHandler:
                 timeframe,
                 limit=limit,
                 end=end_date,
+                feed="iex",
             )
 
             price_data = [

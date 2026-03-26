@@ -100,9 +100,9 @@ class TradingMCPServer:
                 "order_id": order.id,
                 "status": order.status,
                 "symbol": order.symbol,
-                "quantity": float(order.qty),
+                "quantity": float(order.quantity),
                 "side": order.side,
-                "type": order.type
+                "type": order.order_type
             }
         except Exception as e:
             return {"error": f"Failed to place order: {str(e)}"}
