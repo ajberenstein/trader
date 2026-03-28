@@ -8,6 +8,21 @@ import logging
 from .config import Config
 from .models import Account, Order, Position
 
+try:
+    from alpaca.data.historical import StockHistoricalDataClient
+    from alpaca.data.requests import StockBarsRequest
+    from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+    _ALPACA_DATA_AVAILABLE = True
+except ImportError:
+    _ALPACA_DATA_AVAILABLE = False
+
+_TF_MAP = {
+    "1Min":  lambda: TimeFrame(1,  TimeFrameUnit.Minute),
+    "5Min":  lambda: TimeFrame(5,  TimeFrameUnit.Minute),
+    "15Min": lambda: TimeFrame(15, TimeFrameUnit.Minute),
+    "1Hour": lambda: TimeFrame(1,  TimeFrameUnit.Hour),
+} if _ALPACA_DATA_AVAILABLE else {}
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +45,7 @@ class AlpacaConnector:
         self.secret_key = secret_key or Config.SECRET_KEY
         self.base_url = base_url or Config.BASE_URL
         self.client: Optional[REST] = None
+        self.data_client = None
         self.is_connected = False
 
     def connect(self) -> bool:
@@ -59,6 +75,10 @@ class AlpacaConnector:
             account = self.client.get_account()
             logger.info(f"✅ Connected to Alpaca API - Account ID: {account.id}")
             self.is_connected = True
+
+            if _ALPACA_DATA_AVAILABLE:
+                self.data_client = StockHistoricalDataClient(self.api_key, self.secret_key)
+
             return True
 
         except Exception as e:
@@ -204,8 +224,70 @@ class AlpacaConnector:
             logger.error(f"Error fetching trade history: {str(e)}")
             return None
 
+    def get_bars(
+        self,
+        symbol: str,
+        start: str,
+        end: str,
+        timeframe: str = "1Hour",
+        feed: str = "iex",
+    ) -> Optional[dict]:
+        """
+        Download historical OHLCV bars via alpaca-py StockHistoricalDataClient.
+
+        Args:
+            symbol:    Ticker symbol (e.g. 'AAPL')
+            start:     Start date string 'YYYY-MM-DD'
+            end:       End date string 'YYYY-MM-DD'
+            timeframe: '1Min' | '5Min' | '15Min' | '1Hour'
+            feed:      'iex' (free) | 'sip' (paid)
+
+        Returns:
+            dict with keys: symbol, timeframe, start, end, count,
+                            first_bar, last_bar, bars (list of OHLCV dicts)
+        """
+        if not _ALPACA_DATA_AVAILABLE or self.data_client is None:
+            logger.error("alpaca-py data client not available")
+            return None
+
+        if timeframe not in _TF_MAP:
+            logger.error(f"Unsupported timeframe: {timeframe}. Use one of {list(_TF_MAP)}")
+            return None
+
+        try:
+            req = StockBarsRequest(
+                symbol_or_symbols=symbol,
+                timeframe=_TF_MAP[timeframe](),
+                start=start,
+                end=end,
+                adjustment="all",
+                feed=feed,
+            )
+            df = self.data_client.get_stock_bars(req).df.reset_index()
+
+            bars = []
+            for row in df.to_dict(orient="records"):
+                bar = {k: (str(v) if hasattr(v, "isoformat") else v) for k, v in row.items()}
+                bars.append(bar)
+
+            return {
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "feed": feed,
+                "start": start,
+                "end": end,
+                "count": len(bars),
+                "first_bar": str(df["timestamp"].iloc[0]) if len(df) else None,
+                "last_bar": str(df["timestamp"].iloc[-1]) if len(df) else None,
+                "bars": bars,
+            }
+        except Exception as e:
+            logger.error(f"Error fetching bars for {symbol}: {str(e)}")
+            return None
+
     def disconnect(self):
         """Close the connection."""
         self.client = None
+        self.data_client = None
         self.is_connected = False
         logger.info("Disconnected from Alpaca API")

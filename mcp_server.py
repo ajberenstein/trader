@@ -756,6 +756,34 @@ async def get_trade_history(limit: int = 50) -> str:
 
 
 @server.tool()
+async def get_bars(
+    symbol: str,
+    start: str,
+    end: str,
+    timeframe: str = "1Hour",
+    feed: str = "iex",
+) -> str:
+    """
+    Download historical OHLCV bars from Alpaca for a symbol and date range.
+
+    timeframe: "1Min" | "5Min" | "15Min" | "1Hour"
+    feed:      "iex" (free tier) | "sip" (paid subscription)
+    start/end: date strings "YYYY-MM-DD"
+
+    Returns bars list, count, first_bar, last_bar timestamps.
+    """
+    if not trading_server.connector:
+        return json.dumps({"error": "Trading connector not initialized"})
+    try:
+        result = trading_server.connector.get_bars(symbol, start, end, timeframe, feed)
+        if result is None:
+            return json.dumps({"error": f"Failed to fetch bars for {symbol}"})
+        return json.dumps(result, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to get bars: {str(e)}"})
+
+
+@server.tool()
 async def health_check() -> str:
     """Check server health and connectivity."""
     from datetime import datetime, timezone
